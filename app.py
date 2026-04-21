@@ -1,55 +1,81 @@
-import streamlit as st
+import gradio as gr
 import yt_dlp
 import os
 
-# Configuración de la interfaz para dispositivos móviles
-st.set_page_config(page_title="Extractor de MP3", page_icon="📥", layout="centered")
-
-st.title("📥 Extractor de Audio MP3")
-st.markdown("Pega el enlace de un video para obtener el audio en alta calidad.")
-
-# Entrada de URL
-url = st.text_input("Enlace del video:", placeholder="https://www.youtube.com/watch?v=...")
-
-if st.button("Procesar Descarga", use_container_width=True):
+def download_audio(url):
+    """
+    Procesa el enlace proporcionado y extrae el audio en formato MP3.
+    """
     if not url:
-        st.warning("Por favor, ingresa un enlace.")
-    else:
-        with st.spinner("Descargando y convirtiendo..."):
-            output_file = "audio_resultado"
-            ydl_opts = {
-                'format': 'bestaudio/best',
-                'postprocessors': [{
-                    'key': 'FFmpegExtractAudio',
-                    'preferredcodec': 'mp3',
-                    'preferredquality': '192',
-                }],
-                'outtmpl': f"{output_file}.%(ext)s",
-                'quiet': True
-            }
+        return None, "Por favor, ingresa un enlace válido."
+    
+    # Nombre base para el archivo temporal
+    output_base = "audio_descargado"
+    
+    # Configuración de yt-dlp optimizada para audio de alta calidad
+    ydl_opts = {
+        'format': 'bestaudio/best',
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '192',
+        }],
+        'outtmpl': f"{output_base}.%(ext)s",
+        'quiet': True,
+        'no_warnings': True
+    }
 
-            try:
-                # Eliminar archivos temporales previos si existen
-                if os.path.exists(f"{output_file}.mp3"):
-                    os.remove(f"{output_file}.mp3")
+    try:
+        # Limpieza de ejecuciones previas para evitar conflictos de archivos
+        if os.path.exists(f"{output_base}.mp3"):
+            os.remove(f"{output_base}.mp3")
 
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    ydl.download([url])
-                
-                if os.path.exists(f"{output_file}.mp3"):
-                    with open(f"{output_file}.mp3", "rb") as f:
-                        st.download_button(
-                            label="✅ Descargar MP3",
-                            data=f,
-                            file_name="audio_extraido.mp3",
-                            mime="audio/mpeg",
-                            use_container_width=True
-                        )
-                    st.success("¡Audio listo para descargar!")
-                else:
-                    st.error("Error al generar el archivo.")
-            except Exception as e:
-                st.error(f"Error en el proceso: {e}")
+        # Ejecución de la descarga y conversión
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
+        
+        # Validación de la existencia del archivo generado
+        if os.path.exists(f"{output_base}.mp3"):
+            return f"{output_base}.mp3", "✅ ¡Proceso completado! El archivo está listo para descargar."
+        else:
+            return None, "❌ Error: El archivo no pudo ser generado por el servidor."
+            
+    except Exception as e:
+        # Captura de errores técnicos (ej. enlaces caídos o problemas de red)
+        return None, f"❌ Error técnico: {str(e)}"
 
-st.divider()
-st.caption("Herramienta optimizada para uso móvil.")
+# Diseño de la interfaz con Gradio Blocks
+with gr.Blocks(title="Extractor de Audio", theme=gr.themes.Soft()) as demo:
+    gr.Markdown("# 📥 Extractor de Audio MP3")
+    gr.Markdown("Extrae el audio de cualquier video de forma rápida y gratuita. Ideal para guardar música o podcasts en tu celular.")
+    
+    with gr.Group():
+        with gr.Row():
+            url_input = gr.Textbox(
+                label="URL del Video", 
+                placeholder="Pega aquí el link de YouTube, Vimeo, etc.",
+                lines=1,
+                scale=4
+            )
+        
+        process_btn = gr.Button("🚀 OBTENER MP3", variant="primary")
+    
+    # Área de resultados
+    with gr.Row():
+        status_output = gr.Textbox(label="Estado", interactive=False)
+    
+    file_output = gr.File(label="Descargar Archivo")
+
+    # Mapeo de la acción del botón
+    process_btn.click(
+        fn=download_audio,
+        inputs=[url_input],
+        outputs=[file_output, status_output]
+    )
+
+    gr.Markdown("---")
+    gr.Markdown("💡 **Consejo:** Una vez que aparezca el archivo en el recuadro superior, presiona la flecha de descarga para guardarlo en tu dispositivo.")
+
+# Punto de entrada de la aplicación
+if __name__ == "__main__":
+    demo.launch()
